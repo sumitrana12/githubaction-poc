@@ -1,54 +1,96 @@
 #!/bin/bash
 
-# Script to print GitHub secrets and handle environment files
-# Secrets are passed as environment variables in GitHub Actions
+# Script to print GitHub environment secrets
+# Works with individual environment secrets: APP_NAME, API_URL, DATABASE_URL
 
-echo "=== GitHub Environment Secrets Reader ==="
+echo "=== GitHub Environment Secrets Reader (Shell) ==="
 echo "Date: $(date)"
-echo "============================================"
+echo "=================================================="
 
-# Function to handle environment file secrets
-handle_env_file() {
-    local env_name=$1
-    local env_content=$2
-    local env_file="${env_name,,}.env"  # Convert to lowercase for filename
-    
-    if [ ! -z "$env_content" ]; then
-        echo "Processing $env_name environment file..."
-        echo "$env_content" > "$env_file"
-        echo "  - Created: $env_file"
-        echo "  - Lines: $(wc -l < "$env_file")"
-        echo "  - Content preview:"
-        echo "    $(head -3 "$env_file" | sed 's/=.*/=***/')"
-        
-        # Source the environment file to make variables available
-        set -a  # automatically export all variables
-        source "$env_file"
-        set +a  # turn off automatic export
-        
-        echo "  - Environment variables loaded from $env_file"
-    else
-        echo "$env_name: Not set"
-    fi
+# Function to print environment information
+print_environment_info() {
+    echo "=== Environment Information ==="
+    echo "Environment: ${ENVIRONMENT:-unknown}"
+    echo "GitHub Repository: ${GITHUB_REPOSITORY:-N/A}"
+    echo "GitHub Workflow: ${GITHUB_WORKFLOW:-N/A}"
+    echo "GitHub Actor: ${GITHUB_ACTOR:-N/A}"
     echo ""
 }
 
-# Handle environment file secrets
-handle_env_file "DEV_ENV_FILE" "$DEV_ENV_FILE"
-handle_env_file "PROD_ENV_FILE" "$PROD_ENV_FILE"
-handle_env_file "STAGING_ENV_FILE" "$STAGING_ENV_FILE"
-
-# Print some common environment variables that might be loaded
-echo "=== Loaded Environment Variables ==="
-for var in APP_NAME API_URL DATABASE_URL DEBUG PORT; do
-    if [ ! -z "${!var}" ]; then
-        if [[ "$var" == *"URL"* ]] || [[ "$var" == *"KEY"* ]] || [[ "$var" == *"SECRET"* ]]; then
-            echo "$var: [PRESENT - ${#!var} characters]"
+# Function to print secrets with appropriate masking
+print_secrets() {
+    echo "=== Environment Secrets ==="
+    
+    # Define the three main secrets
+    declare -a secrets=("APP_NAME" "API_URL" "DATABASE_URL")
+    
+    for secret in "${secrets[@]}"; do
+        value="${!secret}"
+        if [ ! -z "$value" ]; then
+            # Mask sensitive URLs and database connections
+            if [[ "$secret" == *"URL"* ]]; then
+                echo "$secret: [PRESENT - ${#value} characters]"
+            else
+                echo "$secret: $value"
+            fi
         else
-            echo "$var: ${!var}"
+            echo "$secret: NOT SET"
         fi
-    fi
-done
+    done
+    echo ""
+}
 
-echo "============================================"
-echo "Script execution completed" 
+# Function to validate all required secrets are present
+validate_secrets() {
+    echo "=== Secret Validation ==="
+    
+    declare -a required_secrets=("APP_NAME" "API_URL" "DATABASE_URL")
+    declare -a missing_secrets=()
+    
+    for secret in "${required_secrets[@]}"; do
+        if [ -z "${!secret}" ]; then
+            missing_secrets+=("$secret")
+        fi
+    done
+    
+    if [ ${#missing_secrets[@]} -gt 0 ]; then
+        echo "❌ Missing secrets: $(IFS=', '; echo "${missing_secrets[*]}")"
+        return 1
+    else
+        echo "✅ All required secrets are present"
+        return 0
+    fi
+}
+
+# Function to print additional environment variables
+print_additional_env_vars() {
+    echo "=== Additional Environment Variables ==="
+    
+    declare -a additional_vars=("ENVIRONMENT" "GITHUB_REF" "GITHUB_SHA" "RUNNER_OS")
+    
+    for var in "${additional_vars[@]}"; do
+        value="${!var}"
+        if [ ! -z "$value" ]; then
+            echo "$var: $value"
+        fi
+    done
+    echo ""
+}
+
+# Main execution
+print_environment_info
+print_secrets
+
+if validate_secrets; then
+    echo ""
+    print_additional_env_vars
+    echo "=================================================="
+    echo "✅ Script execution completed successfully"
+    exit 0
+else
+    echo ""
+    print_additional_env_vars
+    echo "=================================================="
+    echo "❌ Script execution completed with issues"
+    exit 1
+fi 

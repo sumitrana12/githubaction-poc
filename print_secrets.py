@@ -3,101 +3,90 @@
 import os
 from datetime import datetime
 
-def handle_env_file(env_name, env_content):
-    """Handle environment file secrets by creating .env files and loading variables"""
-    env_file = f"{env_name.lower().replace('_env_file', '')}.env"
+def print_environment_info():
+    """Print current environment information"""
+    environment = os.environ.get('ENVIRONMENT', 'unknown')
+    print(f"Environment: {environment.upper()}")
+    print(f"GitHub Repository: {os.environ.get('GITHUB_REPOSITORY', 'N/A')}")
+    print(f"GitHub Workflow: {os.environ.get('GITHUB_WORKFLOW', 'N/A')}")
+    print(f"GitHub Actor: {os.environ.get('GITHUB_ACTOR', 'N/A')}")
+    print()
+
+def print_secrets():
+    """Print the three main environment secrets"""
+    print("=== Environment Secrets ===")
     
-    if env_content:
-        print(f"Processing {env_name} environment file...")
-        
-        # Write content to file
-        with open(env_file, 'w') as f:
-            f.write(env_content)
-        
-        # Count lines
-        lines = env_content.count('\n') + 1 if env_content.strip() else 0
-        print(f"  - Created: {env_file}")
-        print(f"  - Lines: {lines}")
-        
-        # Show preview (mask values)
-        preview_lines = env_content.strip().split('\n')[:3]
-        print("  - Content preview:")
-        for line in preview_lines:
-            if '=' in line:
-                key, _ = line.split('=', 1)
-                print(f"    {key}=***")
+    secrets = {
+        'APP_NAME': os.environ.get('APP_NAME'),
+        'API_URL': os.environ.get('API_URL'),
+        'DATABASE_URL': os.environ.get('DATABASE_URL')
+    }
+    
+    for secret_name, secret_value in secrets.items():
+        if secret_value:
+            # Mask sensitive-looking values (URLs and DATABASE_URL)
+            if secret_name in ['API_URL', 'DATABASE_URL']:
+                print(f"{secret_name}: [PRESENT - {len(secret_value)} characters]")
             else:
-                print(f"    {line}")
-        
-        # Load variables into environment
-        load_env_file(env_file)
-        print(f"  - Environment variables loaded from {env_file}")
-    else:
-        print(f"{env_name}: Not set")
+                print(f"{secret_name}: {secret_value}")
+        else:
+            print(f"{secret_name}: NOT SET")
     
     print()
 
-def load_env_file(env_file):
-    """Load environment variables from a .env file"""
-    try:
-        with open(env_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    os.environ[key.strip()] = value.strip()
-    except Exception as e:
-        print(f"Error loading {env_file}: {e}")
-
-def print_loaded_variables():
-    """Print common environment variables that might be loaded"""
-    print("=== Loaded Environment Variables ===")
-    common_vars = ['APP_NAME', 'API_URL', 'DATABASE_URL', 'DEBUG', 'PORT', 'NODE_ENV', 'ENVIRONMENT']
+def validate_secrets():
+    """Validate that all required secrets are present"""
+    print("=== Secret Validation ===")
     
-    for var in common_vars:
+    required_secrets = ['APP_NAME', 'API_URL', 'DATABASE_URL']
+    missing_secrets = []
+    
+    for secret in required_secrets:
+        if not os.environ.get(secret):
+            missing_secrets.append(secret)
+    
+    if missing_secrets:
+        print(f"❌ Missing secrets: {', '.join(missing_secrets)}")
+        return False
+    else:
+        print("✅ All required secrets are present")
+        return True
+
+def print_additional_env_vars():
+    """Print additional environment variables that might be useful"""
+    print("=== Additional Environment Variables ===")
+    
+    additional_vars = ['ENVIRONMENT', 'GITHUB_REF', 'GITHUB_SHA', 'RUNNER_OS']
+    
+    for var in additional_vars:
         value = os.environ.get(var)
         if value:
-            # Mask sensitive-looking values
-            if any(keyword in var.upper() for keyword in ['URL', 'KEY', 'SECRET', 'PASSWORD', 'TOKEN']):
-                print(f"{var}: [PRESENT - {len(value)} characters]")
-            else:
-                print(f"{var}: {value}")
+            print(f"{var}: {value}")
+    
+    print()
 
 def main():
     print("=== GitHub Environment Secrets Reader (Python) ===")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("="*50)
+    print("="*55)
     
-    # Handle environment file secrets
-    env_files = {
-        'DEV_ENV_FILE': os.environ.get('DEV_ENV_FILE'),
-        'PROD_ENV_FILE': os.environ.get('PROD_ENV_FILE'),
-        'STAGING_ENV_FILE': os.environ.get('STAGING_ENV_FILE')
-    }
+    # Print environment information
+    print_environment_info()
     
-    for env_name, env_content in env_files.items():
-        handle_env_file(env_name, env_content)
+    # Print and validate secrets
+    print_secrets()
+    is_valid = validate_secrets()
+    print()
     
-    # Print loaded variables
-    print_loaded_variables()
+    # Print additional environment variables
+    print_additional_env_vars()
     
-    print("="*50)
-    print("All environment variables containing 'ENV', 'KEY', 'SECRET', etc.:")
-    
-    # List all environment variables (filtered for security)
-    env_vars = list(os.environ.keys())
-    secret_vars = [var for var in env_vars if any(keyword in var.upper() 
-                   for keyword in ['SECRET', 'KEY', 'TOKEN', 'PASSWORD', 'ENV', 'API', 'DATABASE'])]
-    
-    if secret_vars:
-        for var in sorted(secret_vars):
-            value = os.environ.get(var, "")
-            print(f"  {var}: [PRESENT - {len(value)} characters]")
+    print("="*55)
+    if is_valid:
+        print("✅ Script execution completed successfully")
     else:
-        print("No environment variables found")
-    
-    print("="*50)
-    print("Script execution completed")
+        print("❌ Script execution completed with issues")
+        exit(1)
 
 if __name__ == "__main__":
     main() 

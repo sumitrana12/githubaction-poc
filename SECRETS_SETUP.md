@@ -1,131 +1,158 @@
-# GitHub Secrets Setup Guide
+# GitHub Environment Secrets Setup Guide
 
-This guide explains how to set up the three GitHub secrets (`DEV_ENV_FILE`, `PROD_ENV_FILE`, and `STAGING_ENV_FILE`) that contain multiple environment variables.
+This guide explains how to set up GitHub environment secrets for your repository with two environments (development and production) and three secrets per environment.
 
-## Setting up GitHub Secrets
+## Environment Structure
+
+- **Environments**: `development` and `production`
+- **Secrets per environment**: `APP_NAME`, `API_URL`, and `DATABASE_URL`
+
+## Setting up GitHub Environments and Secrets
+
+### Step 1: Create Environments
 
 1. Go to your repository on GitHub
-2. Click on **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret**
-4. Create the following three secrets:
+2. Click on **Settings** → **Environments**
+3. Click **New environment**
+4. Create two environments:
+   - `development`
+   - `production`
 
-### DEV_ENV_FILE
-**Secret Name:** `DEV_ENV_FILE`
-**Secret Value:**
-```
-APP_NAME=MyApp Development
-API_URL=https://dev-api.example.com
-DATABASE_URL=postgresql://devuser:devpass@dev-db.example.com:5432/myapp_dev
-DEBUG=true
-PORT=3000
-NODE_ENV=development
-JWT_SECRET=dev-jwt-secret-key-123
-REDIS_URL=redis://dev-redis.example.com:6379
-LOG_LEVEL=debug
-CORS_ORIGIN=http://localhost:3000,http://localhost:3001
-```
+### Step 2: Add Secrets to Each Environment
 
-### STAGING_ENV_FILE
-**Secret Name:** `STAGING_ENV_FILE`
-**Secret Value:**
-```
-APP_NAME=MyApp Staging
-API_URL=https://staging-api.example.com
-DATABASE_URL=postgresql://staginguser:stagingpass@staging-db.example.com:5432/myapp_staging
-DEBUG=false
-PORT=3000
-NODE_ENV=staging
-JWT_SECRET=staging-jwt-secret-key-456
-REDIS_URL=redis://staging-redis.example.com:6379
-LOG_LEVEL=info
-CORS_ORIGIN=https://staging.example.com
-EMAIL_SERVICE=staging-email-service
-```
+For each environment, add the following three secrets:
 
-### PROD_ENV_FILE
-**Secret Name:** `PROD_ENV_FILE`
-**Secret Value:**
-```
-APP_NAME=MyApp Production
-API_URL=https://api.example.com
-DATABASE_URL=postgresql://produser:prodpass@prod-db.example.com:5432/myapp
-DEBUG=false
-PORT=80
-NODE_ENV=production
-JWT_SECRET=super-secure-production-jwt-key-789
-REDIS_URL=redis://prod-redis.example.com:6379
-LOG_LEVEL=warn
-CORS_ORIGIN=https://example.com
-EMAIL_SERVICE=production-email-service
-MONITORING_API_KEY=prod-monitoring-key-xyz
-CDN_URL=https://cdn.example.com
-```
+#### Development Environment Secrets
 
-## Using in GitHub Actions
+Navigate to the `development` environment and add these secrets:
 
-The workflow file (`.github/workflows/test-secrets.yml`) demonstrates three approaches:
+**Secret Name:** `APP_NAME`
+**Secret Value:** `MyApp Development`
 
-### 1. Environment-Specific Jobs
+**Secret Name:** `API_URL`
+**Secret Value:** `https://dev-api.example.com`
+
+**Secret Name:** `DATABASE_URL`
+**Secret Value:** `postgresql://devuser:devpass@dev-db.example.com:5432/myapp_dev`
+
+#### Production Environment Secrets
+
+Navigate to the `production` environment and add these secrets:
+
+**Secret Name:** `APP_NAME`
+**Secret Value:** `MyApp Production`
+
+**Secret Name:** `API_URL`
+**Secret Value:** `https://api.example.com`
+
+**Secret Name:** `DATABASE_URL`
+**Secret Value:** `postgresql://produser:prodpass@prod-db.example.com:5432/myapp`
+
+## How GitHub Actions Uses These Secrets
+
+The workflow file (`.github/workflows/test-secrets.yml`) demonstrates how to use environment-specific secrets:
+
+### Development Job
 ```yaml
-test-dev-environment:
+test-development-environment:
   runs-on: ubuntu-latest
-  environment: development  # Uses GitHub Environments
+  environment: development  # Uses development environment
   steps:
     - name: Test Development Environment
       env:
-        DEV_ENV_FILE: ${{ secrets.DEV_ENV_FILE }}
-        STAGING_ENV_FILE: ${{ secrets.STAGING_ENV_FILE }}
-      run: ./print_secrets.sh
+        APP_NAME: ${{ secrets.APP_NAME }}
+        API_URL: ${{ secrets.API_URL }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        ENVIRONMENT: development
+      run: |
+        ./print_secrets.sh
+        python3 print_secrets.py
 ```
 
-### 2. Production Job
+### Production Job
 ```yaml
-test-prod-environment:
+test-production-environment:
   runs-on: ubuntu-latest
-  environment: production  # Uses GitHub Environments
+  environment: production  # Uses production environment
   steps:
     - name: Test Production Environment
       env:
-        PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
-      run: ./print_secrets.sh
+        APP_NAME: ${{ secrets.APP_NAME }}
+        API_URL: ${{ secrets.API_URL }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        ENVIRONMENT: production
+      run: |
+        ./print_secrets.sh
+        python3 print_secrets.py
 ```
-
-### 3. Demo with Inline Values
-Shows how the secrets work with sample data for testing.
 
 ## How the Scripts Work
 
 Both `print_secrets.sh` and `print_secrets.py` will:
 
-1. **Create .env files**: Each environment secret creates a corresponding `.env` file
-   - `DEV_ENV_FILE` → `dev.env`
-   - `STAGING_ENV_FILE` → `staging.env`
-   - `PROD_ENV_FILE` → `prod.env`
+1. **Print environment information**: Shows which environment is currently running
+2. **Display secrets**: Shows the three main secrets (masking sensitive URLs)
+3. **Validate secrets**: Ensures all required secrets are present
+4. **Show additional variables**: Displays GitHub-specific environment variables
 
-2. **Load variables**: All variables from the .env files are loaded into the environment
+### Sample Output
 
-3. **Display safely**: Show which variables are loaded while masking sensitive values
+```
+=== GitHub Environment Secrets Reader ===
+Date: 2024-01-15 10:30:45
+==================================================
+
+=== Environment Information ===
+Environment: DEVELOPMENT
+GitHub Repository: username/repo-name
+GitHub Workflow: Test Environment Secrets
+GitHub Actor: username
+
+=== Environment Secrets ===
+APP_NAME: MyApp Development
+API_URL: [PRESENT - 28 characters]
+DATABASE_URL: [PRESENT - 65 characters]
+
+=== Secret Validation ===
+✅ All required secrets are present
+
+=== Additional Environment Variables ===
+ENVIRONMENT: development
+GITHUB_REF: refs/heads/main
+GITHUB_SHA: abc123...
+RUNNER_OS: Linux
+
+==================================================
+✅ Script execution completed successfully
+```
 
 ## Security Best Practices
 
-- **Never commit .env files** to your repository
-- **Use different secrets** for each environment
-- **Rotate secrets regularly**
-- **Use GitHub Environments** for additional protection of production secrets
-- **Limit access** to production secrets to specific team members
+- **Use GitHub Environments**: Provides additional protection and allows for environment-specific approval requirements
+- **Separate environments**: Keep development and production secrets completely separate
+- **Rotate secrets regularly**: Update your secrets periodically for security
+- **Limit access**: Use environment protection rules to limit who can deploy to production
+- **Monitor usage**: Review GitHub Actions logs to ensure secrets are being used correctly
+
+## Environment Protection Rules (Recommended)
+
+For the production environment, consider adding protection rules:
+
+1. Go to **Settings** → **Environments** → **production**
+2. Enable **Required reviewers** to require manual approval for production deployments
+3. Add **Deployment branches** rule to only allow deployments from main/master branch
+4. Set **Environment secrets** to be accessible only to the production environment
 
 ## Testing Locally
 
-You can test the scripts locally by creating environment files:
+You can test the scripts locally by setting environment variables:
 
 ```bash
-# Create a test environment file
-echo "APP_NAME=Local Test
-API_URL=http://localhost:8000
-DEBUG=true" > test.env
-
-# Export the content as an environment variable
-export DEV_ENV_FILE="$(cat test.env)"
+# Set the environment variables
+export APP_NAME="Local Test App"
+export API_URL="http://localhost:8000"
+export DATABASE_URL="postgresql://localhost/testdb"
+export ENVIRONMENT="local"
 
 # Run the scripts
 ./print_secrets.sh
@@ -134,9 +161,22 @@ python3 print_secrets.py
 
 ## Common Use Cases
 
-- **Multi-environment deployments** (dev, staging, production)
-- **Feature branch testing** with development environment
-- **Configuration management** across different stages
-- **Secret management** for microservices
-- **Database connection strings** per environment
-- **API keys and tokens** specific to each environment 
+- **Multi-environment deployments**: Automatic deployment to development, manual approval for production
+- **Configuration management**: Different API endpoints and database connections per environment
+- **Feature testing**: Safe testing in development environment before production release
+- **Database migrations**: Different database connections for each environment
+- **API integration**: Environment-specific API keys and endpoints
+
+## Troubleshooting
+
+### Missing Secrets Error
+If you see "❌ Missing secrets", ensure:
+1. The environment exists in GitHub
+2. All three secrets (`APP_NAME`, `API_URL`, `DATABASE_URL`) are added to the environment
+3. The job is using the correct environment name in the workflow file
+
+### Access Denied
+If the workflow can't access secrets:
+1. Check that the repository has the correct permissions
+2. Verify the environment protection rules aren't blocking access
+3. Ensure the workflow is triggered by an authorized user/event 
