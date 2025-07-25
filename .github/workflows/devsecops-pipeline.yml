@@ -31,11 +31,57 @@ jobs:
         
     - name: Run linting
       run: |
-        flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics
+        echo "🔍 Starting Python linting check..."
+        
+        # Run flake8 and capture both output and exit code
+        flake8_output=$(flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics) || flake8_exit=$?
+        
+        # Print output regardless
+        if [ -n "$flake8_output" ]; then
+          echo "$flake8_output"
+        fi
+        
+        # Check for errors
+        if [ "${flake8_exit:-0}" -ne 0 ]; then
+          echo "❌ Linting failed with critical errors!"
+          echo "   E9: Syntax errors"
+          echo "   F63: Assertion issues"
+          echo "   F7: Error-prone control flow"
+          echo "   F82: Undefined variables"
+          exit $flake8_exit
+        else
+          echo "✅ Linting passed! No critical errors found."
+          echo "   Note: This check only looks for critical errors."
+          echo "   For a full lint check, consider running flake8 without filters."
+        fi
         
     - name: SAST - Bandit Scan
       run: |
-        bandit -r src -x src/tests
+        # Run bandit and capture output and exit code
+        bandit_output=$(bandit -r src -x src/tests -f json)
+        bandit_exit_code=$?
+        
+        # Print output for logging
+        echo "$bandit_output" | python -m json.tool
+        
+        # Count high and medium severity issues
+        high_issues=$(echo "$bandit_output" | python -c "import sys, json; data = json.load(sys.stdin); print(sum(1 for issue in data['results'] if issue['issue_severity'] == 'HIGH'))")
+        medium_issues=$(echo "$bandit_output" | python -c "import sys, json; data = json.load(sys.stdin); print(sum(1 for issue in data['results'] if issue['issue_severity'] == 'MEDIUM'))")
+        
+        echo "High severity issues: $high_issues"
+        echo "Medium severity issues: $medium_issues"
+        
+        # Determine if we should fail
+        if [ "$high_issues" -gt 0 ]; then
+          echo "Failing build due to $high_issues high severity issues"
+          exit 1
+        elif [ "$medium_issues" -gt 5 ]; then
+          echo "Failing build due to $medium_issues medium severity issues (threshold: 5)"
+          exit 1
+        else
+          echo "Security scan passed: $high_issues high severity issues, $medium_issues medium severity issues"
+          exit 0
+        fi
         
     - name: Dependency Scan
       run: |

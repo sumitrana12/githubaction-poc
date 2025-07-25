@@ -45,6 +45,7 @@ USER appuser
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=5000 \
+    HOST=0.0.0.0 \
     DB_PATH="/app/data"
 
 # Create volume for database
