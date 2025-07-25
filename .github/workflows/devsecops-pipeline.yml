@@ -6,11 +6,30 @@ on:
   pull_request:
     branches: [ main, dev, stage ]
   workflow_dispatch:  # Allows manual trigger
+    inputs:
+      job_to_run:
+        description: 'Which job to run (leave empty to run all jobs)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - validate-and-test
+          - build-scan-and-push
+          - deploy
+          - security-audit
+          - post-deployment
+      run_dependencies:
+        description: 'Run dependencies of selected job'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   validate-and-test:
     name: Validate and Test
     runs-on: ubuntu-latest
+    # Run this job if no specific job is selected, or if this job is selected, or if dependencies are required
+    if: ${{ github.event.inputs.job_to_run == '' || github.event.inputs.job_to_run == 'validate-and-test' || (github.event.inputs.job_to_run == 'build-scan-and-push' && github.event.inputs.run_dependencies == 'true') }}
     # Dynamically set environment based on branch
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
     
@@ -145,8 +164,10 @@ jobs:
   build-scan-and-push:
     name: Build, Scan and Push Docker Image
     runs-on: ubuntu-latest
+    # Run this job if no specific job is selected, or if this job is selected, or if dependencies are required
+    if: ${{ github.event.inputs.job_to_run == '' || github.event.inputs.job_to_run == 'build-scan-and-push' || (contains('deploy security-audit post-deployment', github.event.inputs.job_to_run) && github.event.inputs.run_dependencies == 'true') }}
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
-    needs: validate-and-test
+    needs: [validate-and-test]
     
     steps:
     - name: Download codebase
@@ -215,8 +236,10 @@ jobs:
   deploy:
     name: Deploy to Environment
     runs-on: ubuntu-latest
+    # Run this job if no specific job is selected, or if this job is selected, or if dependencies are required
+    if: ${{ github.event.inputs.job_to_run == '' || github.event.inputs.job_to_run == 'deploy' || (contains('security-audit post-deployment', github.event.inputs.job_to_run) && github.event.inputs.run_dependencies == 'true') }}
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
-    needs: build-scan-and-push
+    needs: [build-scan-and-push]
     
     steps:
     - name: Set environment variables
@@ -252,8 +275,10 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    # Run this job if no specific job is selected, or if this job is selected, or if dependencies are required
+    if: ${{ github.event.inputs.job_to_run == '' || github.event.inputs.job_to_run == 'security-audit' || (github.event.inputs.job_to_run == 'post-deployment' && github.event.inputs.run_dependencies == 'true') }}
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
-    needs: deploy
+    needs: [deploy]
     
     steps:
     - name: DAST Simulation
@@ -269,8 +294,10 @@ jobs:
   post-deployment:
     name: Post Deployment Tasks
     runs-on: ubuntu-latest
+    # Run this job if no specific job is selected, or if this job is selected
+    if: ${{ github.event.inputs.job_to_run == '' || github.event.inputs.job_to_run == 'post-deployment' }}
     environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
-    needs: security-audit
+    needs: [security-audit]
     
     steps:
     - name: Set environment variables
