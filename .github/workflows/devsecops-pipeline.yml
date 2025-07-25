@@ -1,0 +1,233 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [ main, dev, stage ]
+  pull_request:
+    branches: [ main, dev, stage ]
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  validate-and-test:
+    name: Validate and Test
+    runs-on: ubuntu-latest
+    # Dynamically set environment based on branch
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r src/requirements.txt
+        
+    - name: Run linting
+      run: |
+        flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics
+        
+    - name: SAST - Bandit Scan
+      run: |
+        bandit -r src -x src/tests
+        
+    - name: Dependency Scan
+      run: |
+        safety check -r src/requirements.txt
+        
+    - name: Run tests
+      run: |
+        cd src && pytest tests/ --cov=. --cov-report=xml
+        
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: src/coverage.xml
+        
+    - name: Upload codebase for next steps
+      uses: actions/upload-artifact@v3
+      with:
+        name: codebase
+        path: |
+          src/
+          Dockerfile
+          .dockerignore
+        
+  build-and-scan:
+    name: Build and Scan Image
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
+    needs: validate-and-test
+    
+    steps:
+    - name: Download codebase
+      uses: actions/download-artifact@v3
+      with:
+        name: codebase
+        
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      
+    - name: Build image for testing
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        load: true
+        tags: flask-message-board:test
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'flask-message-board:test'
+        format: 'table'
+        exit-code: '0'  # Don't fail on vulnerabilities
+        severity: 'CRITICAL,HIGH'
+        
+    - name: Save Docker image as artifact
+      run: |
+        docker save flask-message-board:test -o flask-message-board-image.tar
+        
+    - name: Upload Docker image
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-image
+        path: flask-message-board-image.tar
+        
+  push-to-registry:
+    name: Push to Docker Hub
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
+    needs: build-and-scan
+    
+    steps:
+    - name: Download codebase
+      uses: actions/download-artifact@v3
+      with:
+        name: codebase
+      
+    - name: Set environment variables
+      id: vars
+      run: |
+        # Extract branch name from GITHUB_REF
+        BRANCH=${GITHUB_REF#refs/heads/}
+        echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+        
+        # Set image tag based on branch
+        if [ "$BRANCH" = "main" ]; then
+          echo "IMAGE_TAG=prod" >> $GITHUB_ENV
+        elif [ "$BRANCH" = "stage" ]; then
+          echo "IMAGE_TAG=staging" >> $GITHUB_ENV
+        else
+          echo "IMAGE_TAG=dev" >> $GITHUB_ENV
+        fi
+        
+    - name: Login to DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN }}
+        
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+      
+    - name: Build and push
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: |
+          sumitrana/flask-message-board:${{ env.IMAGE_TAG }}
+          sumitrana/flask-message-board:${{ env.IMAGE_TAG }}-${{ github.run_number }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+  deploy:
+    name: Deploy to Environment
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
+    needs: push-to-registry
+    
+    steps:
+    - name: Set environment variables
+      id: vars
+      run: |
+        # Extract branch name from GITHUB_REF
+        BRANCH=${GITHUB_REF#refs/heads/}
+        echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+        
+        # Set environment name based on branch
+        if [ "$BRANCH" = "main" ]; then
+          echo "ENV_NAME=production" >> $GITHUB_ENV
+          echo "IMAGE_TAG=prod" >> $GITHUB_ENV
+        elif [ "$BRANCH" = "stage" ]; then
+          echo "ENV_NAME=staging" >> $GITHUB_ENV
+          echo "IMAGE_TAG=staging" >> $GITHUB_ENV
+        else
+          echo "ENV_NAME=development" >> $GITHUB_ENV
+          echo "IMAGE_TAG=dev" >> $GITHUB_ENV
+        fi
+        
+    - name: Deploy notification
+      run: |
+        echo "Deploying to ${{ env.ENV_NAME }} environment"
+        echo "Image: sumitrana/flask-message-board:${{ env.IMAGE_TAG }}-${{ github.run_number }}"
+        # In a real scenario, you would add actual deployment steps here
+        # For example, using kubectl or helm to deploy to a Kubernetes cluster
+        
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
+    needs: deploy
+    
+    steps:
+    - name: DAST Simulation
+      run: |
+        echo "Simulating Dynamic Application Security Testing"
+        echo "Would typically use tools like OWASP ZAP here"
+        
+    - name: Security Compliance Check
+      run: |
+        echo "Simulating security compliance checks"
+        echo "Would check for SOC2, GDPR, HIPAA compliance as needed"
+        
+  post-deployment:
+    name: Post Deployment Tasks
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || github.ref == 'refs/heads/stage' && 'staging' || 'development' }}
+    needs: security-audit
+    
+    steps:
+    - name: Set environment variables
+      id: vars
+      run: |
+        # Extract branch name from GITHUB_REF
+        BRANCH=${GITHUB_REF#refs/heads/}
+        
+        # Set environment name based on branch
+        if [ "$BRANCH" = "main" ]; then
+          echo "ENV_NAME=production" >> $GITHUB_ENV
+        elif [ "$BRANCH" = "stage" ]; then
+          echo "ENV_NAME=staging" >> $GITHUB_ENV
+        else
+          echo "ENV_NAME=development" >> $GITHUB_ENV
+        fi
+    
+    - name: Smoke Test
+      run: |
+        echo "Running ${{ env.ENV_NAME }} smoke tests"
+        # Would typically make requests to verify deployment
+        
+    - name: Notify Team
+      run: |
+        echo "Notification sent: Deployment to ${{ env.ENV_NAME }} completed"
+        # Would typically integrate with Slack, Teams, email, etc. 

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flask Message Board</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background-color: #2980b9;
+        }
+        .message {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+        }
+        .message-content {
+            font-size: 16px;
+        }
+        .message-time {
+            color: #7f8c8d;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Flask Message Board</h1>
+        
+        <div class="form-group">
+            <textarea id="message-input" class="form-control" placeholder="Type your message here..."></textarea>
+        </div>
+        <div class="form-group">
+            <button id="post-btn" class="btn">Post Message</button>
+        </div>
+        
+        <h2>Messages</h2>
+        <div id="messages-container"></div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load messages on page load
+            loadMessages();
+            
+            // Set up event listeners
+            document.getElementById('post-btn').addEventListener('click', postMessage);
+        });
+        
+        function loadMessages() {
+            fetch('/api/messages')
+                .then(response => response.json())
+                .then(messages => {
+                    const container = document.getElementById('messages-container');
+                    container.innerHTML = '';
+                    
+                    if (messages.length === 0) {
+                        container.innerHTML = '<p>No messages yet. Be the first to post!</p>';
+                        return;
+                    }
+                    
+                    messages.forEach(message => {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = 'message';
+                        
+                        const content = document.createElement('div');
+                        content.className = 'message-content';
+                        content.textContent = message.content;
+                        
+                        const time = document.createElement('div');
+                        time.className = 'message-time';
+                        const date = new Date(message.created_at);
+                        time.textContent = date.toLocaleString();
+                        
+                        messageDiv.appendChild(content);
+                        messageDiv.appendChild(time);
+                        container.appendChild(messageDiv);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading messages:', error);
+                });
+        }
+        
+        function postMessage() {
+            const input = document.getElementById('message-input');
+            const content = input.value.trim();
+            
+            if (!content) {
+                alert('Please enter a message.');
+                return;
+            }
+            
+            fetch('/api/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to post message');
+                }
+                input.value = '';
+                loadMessages();
+            })
+            .catch(error => {
+                console.error('Error posting message:', error);
+                alert('Failed to post message. Please try again.');
+            });
+        }
+    </script>
+</body>
+</html> 
