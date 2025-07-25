@@ -143,9 +143,9 @@ Our optimized pipeline includes the following stages:
    - Single-stage process for efficiency 
    - Multi-stage Docker build for smaller images
    - Container scanning with Trivy
-   - Dual tagging strategy:
-     - Environment tag (e.g., `dev`, `staging`, `prod`)
-     - Timestamped tag (e.g., `dev-20250725-153045`)
+   - Timestamp-based tagging strategy:
+     - Format: `{env}-{timestamp}` (e.g., `dev-20250725-153045`)
+     - Creates immutable artifact history for each build
 
 3. **Deploy**
    - Environment-specific configuration and secrets

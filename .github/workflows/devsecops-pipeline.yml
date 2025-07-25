@@ -203,16 +203,13 @@ jobs:
     - name: Tag and push Docker image
       run: |
         echo "🔍 Tagging and pushing Docker image..."
-        # Tag the locally built image with the registry tags
-        docker tag flask-message-board:test sumitrana/flask-message-board:${{ env.IMAGE_TAG }}
+        # Tag the locally built image with the timestamp tag only
         docker tag flask-message-board:test sumitrana/flask-message-board:${{ env.IMAGE_TAG }}-${{ env.TIMESTAMP }}
         
-        # Push the tagged images
-        docker push sumitrana/flask-message-board:${{ env.IMAGE_TAG }}
+        # Push only the timestamped image
         docker push sumitrana/flask-message-board:${{ env.IMAGE_TAG }}-${{ env.TIMESTAMP }}
         
-        echo "✅ Successfully pushed images:"
-        echo "   sumitrana/flask-message-board:${{ env.IMAGE_TAG }}"
+        echo "✅ Successfully pushed image:"
         echo "   sumitrana/flask-message-board:${{ env.IMAGE_TAG }}-${{ env.TIMESTAMP }}"
           
   deploy:
