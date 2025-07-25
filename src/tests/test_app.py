@@ -3,17 +3,20 @@ import os
 import json
 import pytest
 
-# Add parent directory to path to import the app
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+# Add parent directory to path to import the app correctly
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.app import app, init_app
+# Import directly from app module, not src.app
+from app import app, init_app
 
 @pytest.fixture
 def client():
     app.config['TESTING'] = True
-    init_app()  # Initialize the app with test configuration
-    with app.test_client() as client:
-        yield client
+    app.config['SERVER_NAME'] = 'localhost.localdomain'  # Needed for URL generation
+    with app.app_context():
+        init_app()  # Initialize the app with test configuration
+        with app.test_client() as client:
+            yield client
 
 def test_health_endpoint(client):
     response = client.get('/api/health')
