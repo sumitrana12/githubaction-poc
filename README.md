@@ -133,34 +133,41 @@ Each branch automatically deploys to its corresponding environment when changes 
 
 Our optimized pipeline includes the following stages:
 
-1. **Validate and Test** - Code quality, security scanning, and testing in one job
-   - Linting with Flake8
-   - SAST scanning with Bandit
-   - Dependency scanning with Safety
-   - Unit testing with pytest
-   - Code coverage reporting
+1. **Validate and Test**
+   - Code linting with Flake8 (only fails on critical errors)
+   - SAST scanning with Bandit (fails on any high issues or >5 medium issues)
+   - Dependency scanning with Safety (configurable severity thresholds)
+   - Unit testing with pytest and coverage reporting
 
-2. **Build and Scan** - Docker image building and vulnerability scanning
+2. **Build, Scan, and Push**
+   - Single-stage process for efficiency 
    - Multi-stage Docker build for smaller images
-   - Trivy scan for container vulnerabilities
+   - Container scanning with Trivy
+   - Dual tagging strategy:
+     - Environment tag (e.g., `dev`, `staging`, `prod`)
+     - Timestamped tag (e.g., `dev-20250725-153045`)
 
-3. **Push to Registry** - Push to Docker Hub with environment-specific tags
-   - Versioned image tagging based on environment
-   - Build caching for faster deployments
-
-4. **Deploy** - Deploy to the appropriate environment based on the branch
+3. **Deploy**
    - Environment-specific configuration and secrets
    - Zero-downtime deployment strategy
 
-5. **Security Audit** - DAST and compliance checks
+4. **Security Audit**
    - Dynamic Application Security Testing
-   - Compliance with security standards
+   - Compliance verification
 
-6. **Post-Deployment** - Smoke tests and notifications
-   - Automated verification of deployment
-   - Team notifications via communication channels
+5. **Post-Deployment**
+   - Automated smoke tests
+   - Team notifications
 
-The pipeline dynamically determines the target environment and image tags based on the branch name, and uses GitHub artifacts to pass code and Docker images between jobs, avoiding redundant checkouts and builds.
+### Pipeline Optimizations
+
+- **Single Docker build**: Builds once and reuses the image for scanning and pushing
+- **Timestamp-based versioning**: Creates immutable artifact history for each build
+- **Configurable security thresholds**: Different severity levels for different security tools
+- **Enhanced logging**: Clear status messages throughout the pipeline
+- **Artifact reuse**: Shares built artifacts between jobs for efficiency
+
+The pipeline dynamically determines the target environment and image tags based on the branch name, and uses GitHub artifacts to pass code between jobs, avoiding redundant checkouts.
 
 ## Security Features
 
@@ -174,6 +181,7 @@ The pipeline dynamically determines the target environment and image tags based 
 - **Healthcheck implementation**: Ensures application availability
 - **Input validation**: Prevents injection attacks
 - **Environment-based configuration**: Isolates environments for better security
+- **Configurable security thresholds**: Different policies for different severity levels
 
 ## Setup Requirements for CI/CD
 
