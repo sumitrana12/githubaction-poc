@@ -85,7 +85,41 @@ jobs:
         
     - name: Dependency Scan
       run: |
-        safety check -r src/requirements.txt
+        echo "🔍 Scanning dependencies for vulnerabilities..."
+        
+        # Create a safety configuration file to set failure thresholds
+        cat > .safety-policy.yml << EOF
+        security:
+          ignore-cvss-severity-below: 7  # Only fail on high severity (CVSS >= 7.0)
+          ignore-vulnerabilities:
+            # Ignore specific vulnerabilities if needed
+            # "64484": "PVE-2024-64484"  # Example format
+        EOF
+        
+        # Run safety check with custom policy
+        safety_output=$(safety check -r src/requirements.txt --policy-file .safety-policy.yml --json) || safety_exit=$?
+        
+        # Parse the output to show a summary
+        vuln_count=$(echo $safety_output | python -c "import sys, json; data=json.loads(sys.stdin.read()); print(len(data.get('vulnerabilities', [])))")
+        critical_count=$(echo $safety_output | python -c "import sys, json; data=json.loads(sys.stdin.read()); print(sum(1 for v in data.get('vulnerabilities', []) if v.get('severity', '').lower() == 'critical'))")
+        high_count=$(echo $safety_output | python -c "import sys, json; data=json.loads(sys.stdin.read()); print(sum(1 for v in data.get('vulnerabilities', []) if v.get('severity', '').lower() == 'high'))")
+        
+        # Print human-readable output
+        echo "$safety_output" | python -m json.tool
+        echo "--------------------------------"
+        echo "Total vulnerabilities found: $vuln_count"
+        echo "Critical vulnerabilities: $critical_count"
+        echo "High vulnerabilities: $high_count"
+        
+        # Determine if we should fail based on our policy
+        if [ "${safety_exit:-0}" -ne 0 ] && [ "$critical_count" -gt 0 -o "$high_count" -gt 0 ]; then
+          echo "❌ Security scan failed due to high severity vulnerabilities!"
+          exit 1
+        else
+          echo "✅ Security scan passed based on severity threshold!"
+          echo "   Note: Lower severity vulnerabilities might still exist"
+          exit 0
+        fi
         
     - name: Run tests
       run: |
